@@ -421,8 +421,14 @@ namespace
         std::vector<Input> inputs;
         inputs.reserve(movieLen);
 
-        const auto path = FileUtil::UnitTestDir() + L"TestInput.txt";
-        std::ifstream inputFile(path);
+        const auto inputPath = FileUtil::UnitTestDir() + L"TestInput.txt";
+        if (!std::filesystem::exists(inputPath))
+        {
+            wprintf(L"\nError: Couldn't find unit test input file %s.\n", inputPath.c_str());
+            exit(1);
+        }
+
+        std::ifstream inputFile(inputPath);
         std::string inputLine;
 
         inputs.emplace_back(Input());
@@ -439,7 +445,14 @@ namespace
             }
         }
 
-        std::ifstream dataFile(FileUtil::UnitTestDir() + L"TestData.txt");
+        const auto dataPath = FileUtil::UnitTestDir() + L"TestData.txt";
+        std::ifstream dataFile(dataPath);
+        if (!std::filesystem::exists(dataPath))
+        {
+            wprintf(L"\nError: Couldn't find unit test input file %s.\n", dataPath.c_str());
+            exit(1);
+        }
+
         std::string dataLine;
 
         // TODO better method for this?
