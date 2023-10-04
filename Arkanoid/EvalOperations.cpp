@@ -83,9 +83,9 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
                     const auto claimJob = [&] {
                         std::lock_guard<std::mutex> lock(eval.sharedState->resultsSentry);
 
-                        if (eval.sharedState->results.size() > 0)
+                        if (!eval.sharedState->results.empty())
                         {
-                            result = eval.sharedState->results.back();
+                            result = std::move(eval.sharedState->results.back());
                             eval.sharedState->results.pop_back();
                             jobCount++;
                             jobsRemaining = true;
@@ -96,7 +96,7 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
                         }
                     };
 
-                    claimJob(); // PERF: Slow
+                    claimJob();
 
                     if (!jobsRemaining)
                     {
@@ -112,11 +112,7 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
 
                         if (eval.queueResults)
                         {
-                            if (jobCount % 5000 == 0) printf("Thread %d completed %d jobs\n", threadId, jobCount);
-
-
-                            // PERF: Temporary limit for performance eval.
-                            if (jobCount >= 1000000) break;
+                            if (jobCount % 10000 == 0) printf("Thread %d completed %d jobs\n", threadId, jobCount);
                         }
                         else
                         {
@@ -415,13 +411,12 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
 {
     if (eval.queueResults && queueResults)
     {
-        std::lock_guard<std::mutex> lock(eval.sharedState->resultsSentry); // PERF: Slow
+        auto newResult = std::make_pair(state, eval);
 
-        if (eval.sharedState->results.size() < MaxResults)
-        {
-            eval.sharedState->results.emplace_back(std::make_pair(state, eval));
-            return;
-        }
+        std::lock_guard<std::mutex> lock(eval.sharedState->resultsSentry);
+
+        eval.sharedState->results.emplace_back(std::move(newResult));
+        return;
     }
 
     if (!eval.noConditions)
@@ -502,7 +497,7 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
     auto manipulateFromLeftSide = false;
     const auto decisionPoint = GetNextDecisionPoint(state, eval, targetFrame, expectedBallPos, exclusions, manipulateFromLeftSide);
     
-    const auto levelEnded = checkLevelEnd(state, eval, decisionPoint); // PERF: Slow
+    const auto levelEnded = checkLevelEnd(state, eval, decisionPoint);
     const auto failedPowerupCheck = (eval.ensurePowerupByDepth > 0 && eval.depth == eval.ensurePowerupByDepth
                                      && decisionPoint != DecisionPoint::ManipPowerup && state.ownedPowerup == Powerup::None
                                      && state.spawnedPowerup == Powerup::None);
@@ -2067,7 +2062,8 @@ bool EvalOp::ReachedFrameLimit(const GameState& state, EvalState& eval)
 {
     if (state._frame >= eval.frameLimit())
     {
-        /*if (eval.outputBestAttempts) // PERF: Necessary?
+        // Disabled for performance improvements. TODO move to compile-time constant?
+        /*if (eval.outputBestAttempts)
         {
             auto outputResult = false;
             const auto hitsRemaining = EvalOp::GetRemainingHits(state);
