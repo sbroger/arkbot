@@ -106,7 +106,7 @@ struct Enemy
 // TODO use templates instead
 
 constexpr unsigned int _Level = 1;
-constexpr bool _CompileTimeLevel = false;
+constexpr bool _CompileTimeLevel = true;
 
 // Do extra updates and checks done by the original game engine, that aren't
 // strictly necessary for the evaluation.

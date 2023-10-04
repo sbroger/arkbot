@@ -2,6 +2,7 @@
 
 #include <GameState.h>
 
+#include <atomic>
 #include <memory>
 #include <future>
 
@@ -105,12 +106,17 @@ using ResultSet = std::vector<Result>;
 // to other executing threads.
 struct SharedState
 {
-    unsigned int frameLimit = 0;
-    unsigned int bestBlockHitCount = 9999;
-    std::mutex dataSentry;
+    // General-purpose sentry to avoid thread contention on things beyond the scope of this struct.
+    // Located here for convenience.
+    std::mutex genericSentry;
 
+    std::atomic<unsigned int> frameLimit = 0;
+    std::atomic<unsigned int> bestBlockHitCount = 9999;
+
+    std::mutex resultsSentry;
     ResultSet results;
 
+    // These are constant once set and don't need to be atomic.
     std::unordered_map<BallInitState, PaddleBounceState, BallInitStateHasher> bounceTable;
     std::vector<unsigned int> hitTable;
 };
@@ -159,7 +165,7 @@ struct EvalState
 
     std::vector<std::function<bool(const GameState& state, const EvalState& eval)>> conditions;
 
-    unsigned int frameLimit() const { return sharedState->frameLimit; }
+    unsigned int frameLimit() const { return sharedState->frameLimit.load(); }
 
     std::shared_ptr<SharedState> sharedState = std::make_shared<SharedState>();
 };

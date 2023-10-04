@@ -36,8 +36,10 @@ void EvalOp::Evaluate(const GameState& state, EvalState& eval)
     }
 
     // Prime the queue with one decision point's worth of jobs, then start the job queue.
-    ExecuteNextDecisionPoint(GameState(state), eval);
-    StartJobQueue(GameState(state), eval);
+    auto stateCopyA = state;
+    auto stateCopyB = state;
+    ExecuteNextDecisionPoint(stateCopyA, eval);
+    StartJobQueue(stateCopyB, eval);
 }
 
 void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
@@ -72,14 +74,14 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
                 auto threadId = -1;
 
                 {
-                    std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
+                    std::lock_guard<std::mutex> lock(eval.sharedState->genericSentry);
                     threadId = nextThreadId++;
                 }
 
                 while (jobsRemaining)
                 {
                     const auto claimJob = [&] {
-                        std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
+                        std::lock_guard<std::mutex> lock(eval.sharedState->resultsSentry);
 
                         if (eval.sharedState->results.size() > 0)
                         {
@@ -94,7 +96,7 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
                         }
                     };
 
-                    claimJob();
+                    claimJob(); // PERF: Slow
 
                     if (!jobsRemaining)
                     {
@@ -111,6 +113,10 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
                         if (eval.queueResults)
                         {
                             if (jobCount % 5000 == 0) printf("Thread %d completed %d jobs\n", threadId, jobCount);
+
+
+                            // PERF: Temporary limit for performance eval.
+                            if (jobCount >= 1000000) break;
                         }
                         else
                         {
@@ -409,7 +415,7 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
 {
     if (eval.queueResults && queueResults)
     {
-        std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
+        std::lock_guard<std::mutex> lock(eval.sharedState->resultsSentry); // PERF: Slow
 
         if (eval.sharedState->results.size() < MaxResults)
         {
@@ -438,8 +444,7 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
         auto complete = false;
 
         {
-            std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-            complete = (decisionPoint == DecisionPoint::None_LevelEnded && state._frame <= eval.sharedState->frameLimit);
+            complete = (decisionPoint == DecisionPoint::None_LevelEnded && state._frame <= eval.sharedState->frameLimit.load());
         }
 
         if (complete)
@@ -451,8 +456,6 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
             
             if (_PrintSolution)
             {
-                std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-
                 GameState freshState;
                 GameOp::Init(freshState);
                 GameOp::AdvanceToLevel(freshState, state.level);
@@ -466,9 +469,8 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
             }
 
             {
-                std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-                eval.sharedState->frameLimit = state._frame - 1;
-                eval.sharedState->bestBlockHitCount = 0;
+                eval.sharedState->frameLimit.store(state._frame - 1);
+                eval.sharedState->bestBlockHitCount.store(0);
             }
 
             if (eval.outputBizHawkMovie)
@@ -500,7 +502,7 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
     auto manipulateFromLeftSide = false;
     const auto decisionPoint = GetNextDecisionPoint(state, eval, targetFrame, expectedBallPos, exclusions, manipulateFromLeftSide);
     
-    const auto levelEnded = checkLevelEnd(state, eval, decisionPoint);
+    const auto levelEnded = checkLevelEnd(state, eval, decisionPoint); // PERF: Slow
     const auto failedPowerupCheck = (eval.ensurePowerupByDepth > 0 && eval.depth == eval.ensurePowerupByDepth
                                      && decisionPoint != DecisionPoint::ManipPowerup && state.ownedPowerup == Powerup::None
                                      && state.spawnedPowerup == Powerup::None);
@@ -1619,8 +1621,7 @@ ResultSet EvalOp::BounceBall(GameState& state, EvalState& eval, const unsigned i
                 {
                     if (eval.treatLookupFailuresAsFatal)
                     {
-                        std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-                        eval.sharedState->frameLimit = 1;
+                        eval.sharedState->frameLimit.store(1);
                     }
 
                     const auto msg = "Bounce table registers hit but actual result misses!\n";
@@ -1631,8 +1632,7 @@ ResultSet EvalOp::BounceBall(GameState& state, EvalState& eval, const unsigned i
                 {
                     if (eval.treatLookupFailuresAsFatal)
                     {
-                        std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-                        eval.sharedState->frameLimit = 1;
+                        eval.sharedState->frameLimit.store(1);
                     }
 
                     const auto msg = "Bounce table registers miss but actual result hits!\n";
@@ -1648,8 +1648,7 @@ ResultSet EvalOp::BounceBall(GameState& state, EvalState& eval, const unsigned i
                     {
                         if (eval.treatLookupFailuresAsFatal)
                         {
-                            std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-                            eval.sharedState->frameLimit = 1;
+                            eval.sharedState->frameLimit.store(1);
                         }
 
                         const auto msg = "Bounce table angle mismatch! Bounce table angle is " + std::to_string(static_cast<int>(angle))
@@ -1670,8 +1669,7 @@ ResultSet EvalOp::BounceBall(GameState& state, EvalState& eval, const unsigned i
                 {
                     if (eval.treatLookupFailuresAsFatal)
                     {
-                        std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-                        eval.sharedState->frameLimit = 1;
+                        eval.sharedState->frameLimit.store(1);
                     }
 
                     const auto msg = "??? Unknown bounce table condition\n";
@@ -2067,43 +2065,35 @@ unsigned int EvalOp::GetRemainingHits(const GameState& state)
 
 bool EvalOp::ReachedFrameLimit(const GameState& state, EvalState& eval)
 {
-    // Fallbacks in case we're just executing with nothing happening.
-    // This also guards against reentrancy from GetNextDecisionPoint -> ReachedFrameLimit call chaining.
-    if (state.inputChain.size() > 2000) return true;
-    if (eval.frameLimit() <= 1) return true;
-
     if (state._frame >= eval.frameLimit())
     {
-        if (eval.outputBestAttempts)
+        /*if (eval.outputBestAttempts) // PERF: Necessary?
         {
             auto outputResult = false;
             const auto hitsRemaining = EvalOp::GetRemainingHits(state);
 
+            if (hitsRemaining < eval.sharedState->bestBlockHitCount.load())
             {
-                std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
-                if (hitsRemaining < eval.sharedState->bestBlockHitCount)
+                eval.sharedState->frameLimit.store(eval.sharedState->frameLimit.load() + 10000);
+
+                auto stateCopy = state;
+
+                unsigned int targetFrame, expectedBallPos;
+                const auto nextDecision = GetNextDecisionPoint(stateCopy, eval, targetFrame, expectedBallPos);
+
+                eval.sharedState->frameLimit.store(eval.sharedState->frameLimit.load() - 10000);
+
+                if (nextDecision != DecisionPoint::None_BallLost && nextDecision != DecisionPoint::Invalid)
                 {
-                    eval.sharedState->frameLimit += 10000;
+                    // TODO verbose flag?
+                    //const auto text = std::to_string(hitsRemaining) + " block hit" + (hitsRemaining == 1 ? "" : "s") + " remaining at frame limit "
+                    //    + std::to_string(eval.frameLimit() - eval.startFrame)
+                    //    + (eval.testSinglePaddlePos == 0 ? "" : " (observed from launch pos " + std::to_string(eval.testSinglePaddlePos) + ")");
+                    //printf("%s\n", text.c_str());
+                    //Log::Write(text);
 
-                    auto stateCopy = state;
-
-                    unsigned int targetFrame, expectedBallPos;
-                    const auto nextDecision = GetNextDecisionPoint(stateCopy, eval, targetFrame, expectedBallPos);
-
-                    eval.sharedState->frameLimit -= 10000;
-
-                    if (nextDecision != DecisionPoint::None_BallLost && nextDecision != DecisionPoint::Invalid)
-                    {
-                        // TODO verbose flag?
-                        /*const auto text = std::to_string(hitsRemaining) + " block hit" + (hitsRemaining == 1 ? "" : "s") + " remaining at frame limit "
-                            + std::to_string(eval.frameLimit() - eval.startFrame)
-                            + (eval.testSinglePaddlePos == 0 ? "" : " (observed from launch pos " + std::to_string(eval.testSinglePaddlePos) + ")");
-                        printf("%s\n", text.c_str());
-                        Log::Write(text);*/
-
-                        eval.sharedState->bestBlockHitCount = hitsRemaining;
-                        outputResult = true;
-                    }
+                    eval.sharedState->bestBlockHitCount.store(hitsRemaining);
+                    outputResult = true;
                 }
             }
 
@@ -2111,10 +2101,15 @@ bool EvalOp::ReachedFrameLimit(const GameState& state, EvalState& eval)
             {
                 OutputBizHawkMovie(state, eval, OutputMode::RemainingHits);
             }
-        }
+        }*/
 
         return true;
     }
+
+    // Fallbacks in case we're just executing with nothing happening.
+    // This also guards against reentrancy from GetNextDecisionPoint -> ReachedFrameLimit call chaining.
+    if (state.inputChain.size() > 2000) return true;
+    if (eval.frameLimit() <= 1) return true;
 
     return false;
 }
@@ -2549,7 +2544,7 @@ std::vector<Input> EvalOp::BizHawkMovieToInputChain(const std::wstring& filename
 
 void EvalOp::OutputBizHawkMovie(const GameState& state, const EvalState& eval, const OutputMode mode)
 {
-    std::lock_guard<std::mutex> lock(eval.sharedState->dataSentry);
+    std::lock_guard<std::mutex> lock(eval.sharedState->genericSentry);
 
     const auto writeFile = [&](const std::wstring& filename) {
         FileUtil::ClearFile(filename);
@@ -2592,8 +2587,8 @@ void EvalOp::OutputBizHawkMovie(const GameState& state, const EvalState& eval, c
                                          + (eval.ensurePowerupByDepth == 0 ? L"_powerupanywhere" : L"");
     const auto levelFrameHitsFilename = levelFrameHitsDirectory + LR"(\Input Log_)" + std::to_wstring(state.level)
                                         + L"_" + std::to_wstring(state._frame - eval.startFrame)
-                                        + L"_" + std::to_wstring(eval.sharedState->bestBlockHitCount) + L"_hits"
-                                        + (eval.sharedState->bestBlockHitCount == 0 ? L"_COMPLETE" : L"" ) + L".txt";
+                                        + L"_" + std::to_wstring(eval.sharedState->bestBlockHitCount.load()) + L"_hits"
+                                        + (eval.sharedState->bestBlockHitCount.load() == 0 ? L"_COMPLETE" : L"" ) + L".txt";
     
     const auto scoreId = L"score" + std::to_wstring(ScoreToId(state.score));
     const auto scoreVarFilename = FileUtil::ScoreVarDir() + L"Input Log_" + std::to_wstring(state.level)
@@ -3159,7 +3154,7 @@ DecisionSet EvalOp::ObserveDecisionPoints(const std::vector<Input>& inputChain, 
     state._frame = 0;
 
     EvalState eval;
-    eval.sharedState->frameLimit = 99999;
+    eval.sharedState->frameLimit.store(99999);
     eval.depth = 0;
     eval.depthLimit = 999;
     eval.timeLimit = 0;
