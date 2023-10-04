@@ -137,7 +137,6 @@ struct EvalState
     std::string decisionChain;
     Multithreading multithreading;
     unsigned int depthLimit = 999;
-    bool queueResults = false;
     bool outputBizHawkMovie = false;
     bool allPowerupManipOptions = false;
     unsigned int ensurePowerupByDepth = 0;
@@ -169,6 +168,7 @@ struct EvalState
     bool strictHitProgression = false;
 
     unsigned int threadId;
+    unsigned int numThreads;
 
     std::vector<std::function<bool(const GameState& state, const EvalState& eval)>> conditions;
 
@@ -241,9 +241,12 @@ private:
 
     static DecisionPoint GetNextDecisionPoint(GameState& state, EvalState& eval, unsigned int& targetFrame, unsigned int& expectedBallPos,
                                               const std::vector<DecisionPoint>& exclusions = {}, bool manipulateFromLeftSide = false);
-    static void ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const std::vector<DecisionPoint>& exclusions = {}, bool queueResults = false);
+    static void ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const std::vector<DecisionPoint>& exclusions = {});
     static void ExecuteDecisionPoint(GameState& state, EvalState& eval, DecisionPoint decisionPoint, unsigned int targetFrame, unsigned int expectedBallPos,
                                      const std::vector<DecisionPoint>& prevExclusions);
+
+    static void QueueJobs(std::vector<std::pair<GameState, EvalState>>&& jobs);
+    static void QueueJob(std::pair<GameState, EvalState>&& job);
 
     static void LaunchBall(GameState& state, EvalState& eval);
     static ResultSet BounceBall(GameState& state, EvalState& eval, unsigned int ballIdx, unsigned int targetFrame, unsigned int expectedBallPos);

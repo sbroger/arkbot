@@ -108,13 +108,6 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
                     if (queueEmpty()) { EvalOp::Sleep(100); }
                     if (queueEmpty()) { EvalOp::Sleep(100); }
                     if (queueEmpty()) { EvalOp::Sleep(100); }
-                    if (queueEmpty()) { EvalOp::Sleep(100); }
-                    if (queueEmpty()) { EvalOp::Sleep(100); }
-                    if (queueEmpty()) { EvalOp::Sleep(100); }
-                    if (queueEmpty()) { EvalOp::Sleep(100); }
-                    if (queueEmpty()) { EvalOp::Sleep(100); }
-                    if (queueEmpty()) { EvalOp::Sleep(100); }
-                    if (queueEmpty()) { EvalOp::Sleep(100); }
 
                     if (queueEmpty()) break;
 
@@ -123,20 +116,9 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
 
                         const auto id = result.first.paddleX;
 
-                        if (eval.queueResults)
-                        {
-                            if (jobCount % 100000 == 0) printf("Thread %d completed %d jobs\n", threadId, jobCount);
-
-                            if (jobCount >= 1000000) break;
-                        }
-                        else
-                        {
-                            printf("Checking launch location %d\n", id);
-                        }
+                        if (jobCount % 100000 == 0) printf("Thread %d completed %d jobs\n", threadId, jobCount);
 
                         ExecuteNextDecisionPoint(result.first, result.second);
-
-                        if (!eval.queueResults) printf(" -> done with %d\n", id);
                     }
                 }
 
@@ -162,7 +144,6 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
             auto& evalItr = result.second;
 
             ++iter;
-            if (!eval.queueResults && eval.printProgress) printf("Checking launch location %d / %d\n", iter, startingSize);
 
             ExecuteNextDecisionPoint(stateItr, evalItr);
         }
@@ -422,29 +403,46 @@ bool EvalOp::CheckHitLimitExceeded(GameState& state, EvalState& eval)
     return false;
 }
 
-void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const std::vector<DecisionPoint>& exclusions, const bool queueResults)
+void EvalOp::QueueJob(Result&& job)
 {
-    if (eval.queueResults && queueResults)
+    std::vector<Result> jobs;
+    jobs.emplace_back(std::move(job));
+
+    QueueJobs(std::move(jobs));
+}
+
+void EvalOp::QueueJobs(std::vector<Result>&& jobs)
+{
+    if (jobs.empty()) return;
+
+    auto sharedState = jobs.front().second.sharedState;
+    const auto threadId = jobs.front().second.threadId;
+
+    for (auto i = 0; i < sharedState->perThreadQueue.size(); i++)
     {
-        auto newResult = std::make_pair(state, eval);
-
-        for (auto i = 0; i < 16; i++)
+        if (sharedState->perThreadQueue[i].size() < 5)
         {
-            if (eval.sharedState->perThreadQueue[i].size() < 5)
+            printf("Thread %d: Queue %d empty, adding\n", threadId, i);
+            std::lock_guard<std::mutex> lock(*sharedState->perThreadQueueSentry[i]);
+
+            for (auto&& job : jobs)
             {
-                printf("Thread %d: Queue %d empty, adding\n", eval.threadId, i);
-                std::lock_guard<std::mutex> lock(*eval.sharedState->perThreadQueueSentry[i]);
-                eval.sharedState->perThreadQueue[i].emplace_back(std::move(newResult));
-                return;
+                sharedState->perThreadQueue[i].emplace_back(std::move(job));
             }
+            return;
         }
-
-        std::lock_guard<std::mutex> lock(*eval.sharedState->perThreadQueueSentry[eval.threadId]);
-        eval.sharedState->perThreadQueue[eval.threadId].emplace_back(std::move(newResult));
-
-        return;
     }
 
+    std::lock_guard<std::mutex> lock(*sharedState->perThreadQueueSentry[threadId]);
+
+    for (auto&& job : jobs)
+    {
+        sharedState->perThreadQueue[threadId].emplace_back(std::move(job));
+    }
+}
+
+void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const std::vector<DecisionPoint>& exclusions)
+{
     if (!eval.noConditions)
     {
         for (auto&& condition : eval.conditions)
@@ -462,12 +460,8 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
     }
 
     const auto checkLevelEnd = [](GameState& state, EvalState& eval, const DecisionPoint decisionPoint) {
-        auto complete = false;
-
-        {
-            complete = (decisionPoint == DecisionPoint::None_LevelEnded && state._frame <= eval.sharedState->frameLimit.load());
-        }
-
+        auto complete = (decisionPoint == DecisionPoint::None_LevelEnded && state._frame <= eval.sharedState->frameLimit.load());
+        
         if (complete)
         {
             std::string msg("Level " + std::to_string(state.level) + " completed on frame " + std::to_string(state._frame)
@@ -642,21 +636,21 @@ void EvalOp::ExecuteDecisionPoint(GameState& state, EvalState& eval, const Decis
     case DecisionPoint::BounceBall1:
     {
         auto results = BounceBall(state, eval, 0, targetFrame, expectedBallPos);
-        for (auto result : results) ExecuteNextDecisionPoint(result.first, result.second, {}, true);
+        QueueJobs(std::move(results));
         break;
     }
 
     case DecisionPoint::BounceBall2:
     {
         auto results = BounceBall(state, eval, 1, targetFrame, expectedBallPos);
-        for (auto result : results) ExecuteNextDecisionPoint(result.first, result.second, {}, true);
+        QueueJobs(std::move(results));
         break;
     }
 
     case DecisionPoint::BounceBall3:
     {
         auto results = BounceBall(state, eval, 2, targetFrame, expectedBallPos);
-        for (auto result : results) ExecuteNextDecisionPoint(result.first, result.second, {}, true);
+        QueueJobs(std::move(results));
         break;
     }
 
@@ -1221,7 +1215,7 @@ void EvalOp::CollectPowerup(GameState& state, EvalState& eval)
                 if (state.ownedPowerup != Powerup::None && !ReachedFrameLimit(state, eval))
                 {
                     collectedFromLeft = true;
-                    ExecuteNextDecisionPoint(state, eval, {}, true);
+                    QueueJob({ state, eval });
                 }
             }
         }
@@ -1265,7 +1259,7 @@ void EvalOp::CollectPowerup(GameState& state, EvalState& eval)
 
                 if (state.ownedPowerup != Powerup::None && !ReachedFrameLimit(state, eval))
                 {
-                    ExecuteNextDecisionPoint(state, eval, {}, true);
+                    QueueJob({ state, eval });
                 }
             }
         }
