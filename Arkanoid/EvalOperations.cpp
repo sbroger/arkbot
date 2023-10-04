@@ -15,6 +15,28 @@
 #define NOMINMAX
 #include <Windows.h>
 
+auto GetNumThreads(EvalState& eval)
+{
+    unsigned int numThreads;
+    switch (eval.multithreading)
+    {
+    case Multithreading::All:
+        numThreads = std::thread::hardware_concurrency();
+        break;
+
+    case Multithreading::AllButOne:
+        numThreads = std::thread::hardware_concurrency() - 1;
+        break;
+
+    case Multithreading::None:
+    default:
+        numThreads = 1;
+        break;
+    }
+
+    return numThreads;
+}
+
 void EvalOp::Evaluate(const GameState& state, EvalState& eval)
 {
     auto title = L"Level " + std::to_wstring(state.level) + L"   Mask " + eval.bounceMask;
@@ -35,6 +57,9 @@ void EvalOp::Evaluate(const GameState& state, EvalState& eval)
         eval.startTime = std::chrono::high_resolution_clock::now();
     }
 
+    const auto numThreads = GetNumThreads(eval);
+    eval.sharedState->perThreadQueue = std::vector<ResultSet>(numThreads, ResultSet{});
+
     // Prime the queue with one decision point's worth of jobs, then start the job queue.
     auto stateCopyA = state;
     auto stateCopyB = state;
@@ -44,22 +69,7 @@ void EvalOp::Evaluate(const GameState& state, EvalState& eval)
 
 void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
 {
-    unsigned int numThreads;
-    switch (eval.multithreading)
-    {
-    case Multithreading::All:
-        numThreads = std::thread::hardware_concurrency();
-        break;
-
-    case Multithreading::AllButOne:
-        numThreads = std::thread::hardware_concurrency() - 1;
-        break;
-
-    case Multithreading::None:
-    default:
-        numThreads = 1;
-        break;
-    }
+    const auto numThreads = GetNumThreads(eval);
 
     if (numThreads > 1)
     {
@@ -67,9 +77,10 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
         auto nextThreadId = 0;
         for (auto i = 0u; i < numThreads; i++)
         {
+            eval.sharedState->perThreadQueueSentry.emplace_back(std::make_unique<std::mutex>());
+
             threads.emplace_back(std::async(std::launch::async, [&] {
                 std::pair<GameState, EvalState> result;
-                auto jobsRemaining = true;
                 auto jobCount = 0;
                 auto threadId = -1;
 
@@ -78,41 +89,45 @@ void EvalOp::StartJobQueue(GameState& state, EvalState& eval)
                     threadId = nextThreadId++;
                 }
 
-                while (jobsRemaining)
+                auto& thisThreadQueue = eval.sharedState->perThreadQueue[threadId];
+                auto queueEmpty = [&] { return thisThreadQueue.empty(); };
+
+                const auto claimJob = [&] {
+                    std::lock_guard<std::mutex> lock(*eval.sharedState->perThreadQueueSentry[threadId]);
+
+                    result = std::move(thisThreadQueue.back());
+                    thisThreadQueue.pop_back();
+                    result.second.threadId = threadId;
+                    jobCount++;
+                };
+
+                while(true)
                 {
-                    const auto claimJob = [&] {
-                        std::lock_guard<std::mutex> lock(eval.sharedState->resultsSentry);
+                    // Sometimes the queue can be drained midway even though there's still
+                    // work to go around. Wait a bit and retry.
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
+                    if (queueEmpty()) { EvalOp::Sleep(100); }
 
-                        if (!eval.sharedState->results.empty())
-                        {
-                            result = std::move(eval.sharedState->results.back());
-                            eval.sharedState->results.pop_back();
-                            jobCount++;
-                            jobsRemaining = true;
-                        }
-                        else
-                        {
-                            jobsRemaining = false;
-                        }
-                    };
+                    if (queueEmpty()) break;
 
-                    claimJob();
-
-                    if (!jobsRemaining)
                     {
-                        // Sometimes the queue can be drained midway even though there's still
-                        // work to go around. Wait a bit and retry.
-                        EvalOp::Sleep(100);
                         claimJob();
-                    }
 
-                    if (jobsRemaining)
-                    {
                         const auto id = result.first.paddleX;
 
                         if (eval.queueResults)
                         {
-                            if (jobCount % 10000 == 0) printf("Thread %d completed %d jobs\n", threadId, jobCount);
+                            if (jobCount % 100000 == 0) printf("Thread %d completed %d jobs\n", threadId, jobCount);
+
+                            if (jobCount >= 1000000) break;
                         }
                         else
                         {
@@ -413,9 +428,20 @@ void EvalOp::ExecuteNextDecisionPoint(GameState& state, EvalState& eval, const s
     {
         auto newResult = std::make_pair(state, eval);
 
-        std::lock_guard<std::mutex> lock(eval.sharedState->resultsSentry);
+        for (auto i = 0; i < 16; i++)
+        {
+            if (eval.sharedState->perThreadQueue[i].size() < 5)
+            {
+                printf("Thread %d: Queue %d empty, adding\n", eval.threadId, i);
+                std::lock_guard<std::mutex> lock(*eval.sharedState->perThreadQueueSentry[i]);
+                eval.sharedState->perThreadQueue[i].emplace_back(std::move(newResult));
+                return;
+            }
+        }
 
-        eval.sharedState->results.emplace_back(std::move(newResult));
+        std::lock_guard<std::mutex> lock(*eval.sharedState->perThreadQueueSentry[eval.threadId]);
+        eval.sharedState->perThreadQueue[eval.threadId].emplace_back(std::move(newResult));
+
         return;
     }
 
@@ -1267,6 +1293,8 @@ void EvalOp::LaunchBall(GameState& state, EvalState& eval)
         }
 
         // For each launch position...
+        const auto numThreads = GetNumThreads(eval);
+        auto threadId = 0;
         for (auto&& launchPos : launchPositions)
         {
             state = SEQ_START;
@@ -1278,7 +1306,10 @@ void EvalOp::LaunchBall(GameState& state, EvalState& eval)
             // TODO combine A press with next directional input
             GameOp::ExecuteInput(state, AInput);
 
-            eval.sharedState->results.push_back(std::make_pair(state, eval));
+            eval.sharedState->perThreadQueue[threadId].push_back(std::make_pair(state, eval));
+
+            ++threadId;
+            threadId %= numThreads;
         }
 
         state = SEQ_START;

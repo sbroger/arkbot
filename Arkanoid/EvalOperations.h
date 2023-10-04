@@ -116,6 +116,11 @@ struct SharedState
     std::mutex resultsSentry;
     ResultSet results;
 
+
+    std::vector<std::unique_ptr<std::mutex>> perThreadQueueSentry;
+    std::vector<ResultSet> perThreadQueue;
+
+
     // These are constant once set and don't need to be atomic.
     std::unordered_map<BallInitState, PaddleBounceState, BallInitStateHasher> bounceTable;
     std::vector<unsigned int> hitTable;
@@ -162,6 +167,8 @@ struct EvalState
     unsigned int hitProgressionLeadupInterval = 0;
     bool useHitProgressionAveraging = false;
     bool strictHitProgression = false;
+
+    unsigned int threadId;
 
     std::vector<std::function<bool(const GameState& state, const EvalState& eval)>> conditions;
 
