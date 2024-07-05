@@ -437,11 +437,11 @@ namespace
             if (std::getline(inputFile, inputLine))
             {
                 inputs.emplace_back(Input());
-                if (inputLine.find('S') != std::string::npos) inputs.back() |= StartInput;
-                if (inputLine.find('s') != std::string::npos) inputs.back() |= SelectInput;
-                if (inputLine.find('A') != std::string::npos) inputs.back() |= AInput;
-                if (inputLine.find('L') != std::string::npos) inputs.back() |= LeftInput;
-                if (inputLine.find('R') != std::string::npos) inputs.back() |= RightInput;
+                if (inputLine.find('S') != std::string::npos) inputs.back().controller |= StartInput;
+                if (inputLine.find('s') != std::string::npos) inputs.back().controller |= SelectInput;
+                if (inputLine.find('A') != std::string::npos) inputs.back().controller |= AInput;
+                if (inputLine.find('L') != std::string::npos) inputs.back().controller |= LeftInput;
+                if (inputLine.find('R') != std::string::npos) inputs.back().controller |= RightInput;
             }
         }
 
@@ -512,11 +512,11 @@ namespace
             if (std::getline(inputFile, inputLine))
             {
                 inputs.emplace_back(Input());
-                if (inputLine.find('S') != std::string::npos) inputs.back() |= StartInput;
-                if (inputLine.find('s') != std::string::npos) inputs.back() |= SelectInput;
-                if (inputLine.find('A') != std::string::npos) inputs.back() |= AInput;
-                if (inputLine.find('L') != std::string::npos) inputs.back() |= LeftInput;
-                if (inputLine.find('R') != std::string::npos) inputs.back() |= RightInput;
+                if (inputLine.find('S') != std::string::npos) inputs.back().controller |= StartInput;
+                if (inputLine.find('s') != std::string::npos) inputs.back().controller |= SelectInput;
+                if (inputLine.find('A') != std::string::npos) inputs.back().controller |= AInput;
+                if (inputLine.find('L') != std::string::npos) inputs.back().controller |= LeftInput;
+                if (inputLine.find('R') != std::string::npos) inputs.back().controller |= RightInput;
             }
         }
 

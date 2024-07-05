@@ -13,7 +13,9 @@ public:
     static void Init(GameState& state);
     static void AdvanceToLevel(GameState& state, unsigned int level);
     static void ExecuteInput(GameState& state, const Input& input);
+    static void ExecuteInput(GameState& state, const ControllerInput& input);
     static void ExecuteInput(GameState& state, const Input& input, unsigned int count);
+    static void ExecuteInput(GameState& state, const ControllerInput& input, unsigned int count);
     static void ExecuteInputChain(GameState& state, const std::vector<Input>& inputChain);
 
     // Game functions that execute on-demand.

@@ -829,7 +829,7 @@ void EvalOp::HitEnemyWithPaddle(GameState& state, EvalState& eval, const unsigne
 
     state = SEQ_START;
 
-    const auto evaluateHitWindow = [&](const Input leftRightInput) {
+    const auto evaluateHitWindow = [&](const ControllerInput leftRightInput) {
         while (enemy.pos.y + 0xe + 1 < GameConsts::PaddleTop)
         {
             GameOp::ExecuteInput(state, NoInput);
@@ -1537,7 +1537,7 @@ ResultSet EvalOp::BounceBall(GameState& state, EvalState& eval, const unsigned i
                         results[resultIdx] = true;
                         resultCount++;
 
-                        ConvertFuturesTo(state, paddleStart > paddleTarget ? LeftInput : RightInput, numFutures, steps);
+                        ConvertFuturesTo(state, paddleStart > paddleTarget ? Input{ LeftInput, 0 } : Input{ RightInput, 0 }, numFutures, steps);
                         bounceResults.emplace_back(std::pair<GameState, EvalState>{ state, eval });
                     }
                 }
@@ -2544,15 +2544,15 @@ std::vector<Input> EvalOp::BizHawkMovieToInputChain(const std::wstring& filename
                 break;
             }
 
-            Input input = 0;
-            if (str.find('L') != std::string::npos) input |= LeftInput;
-            if (str.find('R') != std::string::npos) input |= RightInput;
-            if (str.find('U') != std::string::npos) input |= UpInput;
-            if (str.find('D') != std::string::npos) input |= DownInput;
-            if (str.find('S') != std::string::npos) input |= StartInput;
-            if (str.find('s') != std::string::npos) input |= SelectInput;
-            if (str.find('A') != std::string::npos) input |= AInput;
-            if (str.find('B') != std::string::npos) input |= BInput;
+            Input input = { 0, 0 };
+            if (str.find('L') != std::string::npos) input.controller |= LeftInput;
+            if (str.find('R') != std::string::npos) input.controller |= RightInput;
+            if (str.find('U') != std::string::npos) input.controller |= UpInput;
+            if (str.find('D') != std::string::npos) input.controller |= DownInput;
+            if (str.find('S') != std::string::npos) input.controller |= StartInput;
+            if (str.find('s') != std::string::npos) input.controller |= SelectInput;
+            if (str.find('A') != std::string::npos) input.controller |= AInput;
+            if (str.find('B') != std::string::npos) input.controller |= BInput;
 
             inputChain.emplace_back(input);
         }
@@ -3324,7 +3324,7 @@ void EvalOp::ConvertFuturesTo(GameState& state, const Input& input, const unsign
 
     for (auto i = state.inputChain.size() - numBlanks; i < state.inputChain.size(); i++)
     {
-        state.inputChain[i] = NoInput;
+        state.inputChain[i] = { NoInput, 0 };
     }
 }
 

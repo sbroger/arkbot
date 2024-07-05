@@ -38,8 +38,8 @@ void GameOp::AdvanceToLevel(GameState& state, const unsigned int level)
 
     state.level = level;
 
-    state.buttons = 0;
-    state.prevButtons = 0;
+    state.buttons = { 0, 0 };
+    state.prevButtons = { 0, 0 };
 
     state.paddleCollis = false;
     state.blockCollisCount = 0;
@@ -104,11 +104,25 @@ void GameOp::ExecuteInput(GameState& state, const Input& input)
     AdvanceFrame(state);
 }
 
+void GameOp::ExecuteInput(GameState& state, const ControllerInput& input)
+{
+    SetInput(state, { input, 0 });
+    AdvanceFrame(state);
+}
+
 void GameOp::ExecuteInput(GameState& state, const Input& input, const unsigned int count)
 {
     for (unsigned int i = 0; i < count; i++)
     {
         ExecuteInput(state, input);
+    }
+}
+
+void GameOp::ExecuteInput(GameState& state, const ControllerInput& input, const unsigned int count)
+{
+    for (unsigned int i = 0; i < count; i++)
+    {
+        ExecuteInput(state, { input, 0 });
     }
 }
 
@@ -569,7 +583,13 @@ void GameOp::CheckPaddleMove(GameState& state)
     // TODO other checks?
     if (!_Pedantic || (ballsExist && state.opState != OperationalState::Paused && state.currentBlocks > 0))
     {
-        if (InputLeft(state.buttons) && !InputRight(state.buttons))
+        if (state.buttons.paddle != 0)
+        {
+            const auto paddleLeftEdge = state.paddleX;
+            const auto delta = state.buttons.paddle - paddleLeftEdge;
+            DoPaddleMove(state, delta);
+        }
+        else if (InputLeft(state.buttons) && !InputRight(state.buttons))
         {
             DoPaddleMove(state, -3);
         }

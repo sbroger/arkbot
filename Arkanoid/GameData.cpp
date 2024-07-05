@@ -2,42 +2,42 @@
 
 bool InputA(const Input inp)
 {
-    return inp & AInput;
+    return inp.controller & AInput;
 }
 
 bool InputB(const Input inp)
 {
-    return inp & BInput;
+    return inp.controller & BInput;
 }
 
 bool InputLeft(const Input inp)
 {
-    return inp & LeftInput;
+    return inp.controller & LeftInput;
 }
 
 bool InputRight(const Input inp)
 {
-    return inp & RightInput;
+    return inp.controller & RightInput;
 }
 
 bool InputUp(const Input inp)
 {
-    return inp & UpInput;
+    return inp.controller & UpInput;
 }
 
 bool InputDown(const Input inp)
 {
-    return inp & DownInput;
+    return inp.controller & DownInput;
 }
 
 bool InputStart(const Input inp)
 {
-    return inp & StartInput;
+    return inp.controller & StartInput;
 }
 
 bool InputSelect(const Input inp)
 {
-    return inp & SelectInput;
+    return inp.controller & SelectInput;
 }
 
 unsigned int BlkHits(const Block block)

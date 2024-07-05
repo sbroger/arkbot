@@ -4,18 +4,18 @@
 
 #include <vector>
 
-static const Input NoInput = 0;
-static const Input AInput = 0x80;
-static const Input BInput = 0x40;
-static const Input SelectInput = 0x20;
-static const Input StartInput = 0x10;
-static const Input UpInput = 8;
-static const Input DownInput = 4;
-static const Input LeftInput = 2;
-static const Input RightInput = 1;
-static const Input RightAInput = 0x81;
-static const Input LeftAInput = 0x82;
-static const Input FutureInput = 0xf0;
+static const ControllerInput NoInput = 0;
+static const ControllerInput AInput = 0x80;
+static const ControllerInput BInput = 0x40;
+static const ControllerInput SelectInput = 0x20;
+static const ControllerInput StartInput = 0x10;
+static const ControllerInput UpInput = 8;
+static const ControllerInput DownInput = 4;
+static const ControllerInput LeftInput = 2;
+static const ControllerInput RightInput = 1;
+static const ControllerInput RightAInput = 0x81;
+static const ControllerInput LeftAInput = 0x82;
+static const ControllerInput FutureInput = 0xf0;
 
 extern unsigned int BlkHits(const Block block);
 extern unsigned int BlkPowerup(const Block block);
