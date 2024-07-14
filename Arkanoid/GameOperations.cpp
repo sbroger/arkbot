@@ -354,6 +354,11 @@ void GameOp::ProcessInput(GameState& state, const Input& input)
 {
     state.prevButtons = state.buttons;
     state.buttons = input;
+
+    if (state.buttons.paddle != 0)
+    {
+        MathUtil::Clamp(state.buttons.paddle, static_cast<uint8_t>(0x10), static_cast<uint8_t>(0xa2));
+    }
 }
 
 void GameOp::UpdateScore(GameState& state)
