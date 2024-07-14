@@ -78,7 +78,7 @@ typedef uint8_t ControllerInput;
 struct Input
 {
     ControllerInput controller;
-    uint8_t paddle;
+    uint8_t arkConInput;
 };
 
 struct Proximity

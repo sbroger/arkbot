@@ -355,9 +355,9 @@ void GameOp::ProcessInput(GameState& state, const Input& input)
     state.prevButtons = state.buttons;
     state.buttons = input;
 
-    if (state.buttons.paddle != 0)
+    if (state.buttons.arkConInput != 0)
     {
-        MathUtil::Clamp(state.buttons.paddle, static_cast<uint8_t>(0x10), static_cast<uint8_t>(0xa2));
+        MathUtil::Clamp(state.buttons.arkConInput, static_cast<uint8_t>(0x10), static_cast<uint8_t>(0xa2));
     }
 }
 
@@ -588,10 +588,10 @@ void GameOp::CheckPaddleMove(GameState& state)
     // TODO other checks?
     if (!_Pedantic || (ballsExist && state.opState != OperationalState::Paused && state.currentBlocks > 0))
     {
-        if (state.buttons.paddle != 0)
+        if (state.buttons.arkConInput != 0)
         {
             const auto paddleLeftEdge = state.paddleX;
-            const auto delta = state.buttons.paddle - paddleLeftEdge;
+            const auto delta = state.buttons.arkConInput - paddleLeftEdge;
             DoPaddleMove(state, delta);
         }
         else if (InputLeft(state.buttons) && !InputRight(state.buttons))

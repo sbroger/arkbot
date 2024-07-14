@@ -2559,11 +2559,11 @@ std::vector<Input> EvalOp::BizHawkMovieToInputChain(const std::wstring& filename
             const auto digitIndex = str.find_first_of("0123456789");
             if (digitIndex != std::string::npos)
             {
-                input.paddle = std::stoi(str.substr(digitIndex));
+                input.arkConInput = std::stoi(str.substr(digitIndex));
                 
                 // For reasons that are unclear, the in-game value is two larger than what's in
                 // the BizHawk movie file, so manually offset it here.
-                input.paddle += 2;
+                input.arkConInput += 2;
             }
 
             inputChain.emplace_back(input);
