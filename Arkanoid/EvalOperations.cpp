@@ -2552,7 +2552,19 @@ std::vector<Input> EvalOp::BizHawkMovieToInputChain(const std::wstring& filename
             if (str.find('S') != std::string::npos) input.controller |= StartInput;
             if (str.find('s') != std::string::npos) input.controller |= SelectInput;
             if (str.find('A') != std::string::npos) input.controller |= AInput;
+            if (str.find('F') != std::string::npos) input.controller |= AInput; // Arkanoid paddle "Fire" button
             if (str.find('B') != std::string::npos) input.controller |= BInput;
+
+            // Extract the arkanoid paddle value, if it exists.
+            const auto digitIndex = str.find_first_of("0123456789");
+            if (digitIndex != std::string::npos)
+            {
+                input.paddle = std::stoi(str.substr(digitIndex));
+                
+                // For reasons that are unclear, the in-game value is two larger than what's in
+                // the BizHawk movie file, so manually offset it here.
+                input.paddle += 2;
+            }
 
             inputChain.emplace_back(input);
         }
